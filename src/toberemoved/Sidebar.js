@@ -1,9 +1,9 @@
 import React from 'react';
-import OrderDataPanel from './OrderDataPanel';
-import TemplatesPanel from './TemplatesPanel';
+import OrderDataPanel from '../components/Sidebar/OrderDataPanel';
+import TemplatesPanel from '../components/Sidebar/TemplatesPanel';
 import ElementsPanel from './ElementsPanel';
 import DataFieldsPanel from './DataFieldsPanel';
-import ElementPropertiesPanel from './ElementPropertiesPanel';
+import ElementPropertiesPanel from '../components/Sidebar/ElementPropertiesPanel';
 
 const Sidebar = ({
   orderData,

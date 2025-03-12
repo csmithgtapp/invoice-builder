@@ -1,12 +1,12 @@
 // src/components/Canvas/CanvasElement.js
 import React, { useState, useEffect, useRef } from 'react';
 import { Move, GripVertical } from 'lucide-react';
-import TextElement from './elements/TextElement';
-import ImageElement from './elements/ImageElement';
-import RectangleElement from './elements/RectangleElement';
-import ListElement from './elements/ListElement';
-import DataFieldElement from './elements/DataFieldElement';
-import TableElement from './elements/TableElement';
+import TextElement from '../components/Canvas/elements/TextElement';
+import ImageElement from '../components/Canvas/elements/ImageElement';
+import RectangleElement from '../components/Canvas/elements/RectangleElement';
+import ListElement from '../components/Canvas/elements/ListElement';
+import DataFieldElement from '../components/Canvas/elements/DataFieldElement';
+import TableElement from '../components/Canvas/elements/TableElement';
 
 const CanvasElement = ({ 
   element, 

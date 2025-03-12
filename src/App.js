@@ -1,13 +1,13 @@
 import React from 'react';
 import './App.css';
-import InvoiceBuilder from './components/InvoiceBuilder';
+import ModernInvoiceBuilder from './components/ModernInvoiceBuilder';
 
 function App() {
   return (
     <div className="App">
-      <InvoiceBuilder />
+      <ModernInvoiceBuilder />
     </div>
   );
 }
 
-export default App;
+export default App;  // This line is critical - make sure it's here

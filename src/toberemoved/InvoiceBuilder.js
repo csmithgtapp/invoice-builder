@@ -2,8 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import OrderService from '../services/OrderService';
 import PDFGenerator from '../services/PDFGenerator';
-import Sidebar from './Sidebar/Sidebar';
-import Canvas from './Canvas/Canvas';
+import Sidebar from './Sidebar';
+import Canvas from './Canvas';
 import { Save, Download, FileText, Eye, EyeOff } from 'lucide-react';
 
 const InvoiceBuilder = () => {

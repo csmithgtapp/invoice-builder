@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { Move } from 'lucide-react';
+// src/components/Canvas/CanvasElement.js
+import React, { useState, useEffect, useRef } from 'react';
+import { Move, GripVertical } from 'lucide-react';
 import TextElement from './elements/TextElement';
 import ImageElement from './elements/ImageElement';
 import RectangleElement from './elements/RectangleElement';
@@ -15,27 +16,32 @@ const CanvasElement = ({
   canvasRef,
   orderData,
   showPlaceholders,
-  getValueFromPath
+  getValueFromPath,
+  isDragOver,
+  setDragOverId
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [resizeDirection, setResizeDirection] = useState('');
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const elementRef = useRef(null);
 
   // Handle mouse down on element
   const handleMouseDown = (e) => {
+    if (e.target.classList.contains('resize-handle') || e.target.classList.contains('no-drag')) {
+      return;
+    }
+    
     e.stopPropagation();
     onSelect();
     
     // Calculate offset from element's position
-    const rect = e.currentTarget.getBoundingClientRect();
+    const rect = elementRef.current.getBoundingClientRect();
     const offsetX = e.clientX - rect.left;
     const offsetY = e.clientY - rect.top;
     
     setDragOffset({ x: offsetX, y: offsetY });
     setIsDragging(true);
-    
-    console.log('Mouse down on element:', element.id);
   };
 
   // Handle resize start
@@ -48,28 +54,25 @@ const CanvasElement = ({
       x: e.clientX,
       y: e.clientY
     });
-    console.log('Starting resize:', direction);
   };
 
   // Handle mouse move for dragging and resizing
   const handleMouseMove = (e) => {
     if (isDragging && !isResizing) {
       // Handle dragging
-      console.log('Dragging element:', element.id);
-      
       if (!canvasRef.current) return;
       
       const canvasRect = canvasRef.current.getBoundingClientRect();
-      const x = Math.max(0, e.clientX - canvasRect.left - dragOffset.x);
-      const y = Math.max(0, e.clientY - canvasRect.top - dragOffset.y);
+      const x = Math.max(0, Math.min(e.clientX - canvasRect.left - dragOffset.x, canvasRect.width - element.width));
+      const y = Math.max(0, Math.min(e.clientY - canvasRect.top - dragOffset.y, canvasRect.height - element.height));
       
       onChange({ ...element, x, y });
     } else if (isResizing) {
       // Handle resizing
-      console.log('Resizing element:', element.id);
-      
+      const canvasRect = canvasRef.current.getBoundingClientRect();
       const deltaX = e.clientX - dragOffset.x;
       const deltaY = e.clientY - dragOffset.y;
+      
       let newWidth = element.width;
       let newHeight = element.height;
       let newX = element.x;
@@ -77,18 +80,22 @@ const CanvasElement = ({
       
       // Update dimensions based on resize direction
       if (resizeDirection.includes('e')) {
-        newWidth = Math.max(50, element.width + deltaX);
+        newWidth = Math.max(50, Math.min(element.width + deltaX, canvasRect.width - element.x));
       }
       if (resizeDirection.includes('s')) {
-        newHeight = Math.max(50, element.height + deltaY);
+        newHeight = Math.max(50, Math.min(element.height + deltaY, canvasRect.height - element.y));
       }
       if (resizeDirection.includes('w')) {
-        newWidth = Math.max(50, element.width - deltaX);
-        newX = element.x + deltaX;
+        const maxDeltaX = element.width - 50; // Don't resize smaller than 50px
+        const clampedDeltaX = Math.max(-maxDeltaX, Math.min(deltaX, element.x));
+        newWidth = element.width - clampedDeltaX;
+        newX = element.x + clampedDeltaX;
       }
       if (resizeDirection.includes('n')) {
-        newHeight = Math.max(50, element.height - deltaY);
-        newY = element.y + deltaY;
+        const maxDeltaY = element.height - 50; // Don't resize smaller than 50px
+        const clampedDeltaY = Math.max(-maxDeltaY, Math.min(deltaY, element.y));
+        newHeight = element.height - clampedDeltaY;
+        newY = element.y + clampedDeltaY;
       }
       
       onChange({ 
@@ -109,7 +116,6 @@ const CanvasElement = ({
   // Handle mouse up to end dragging or resizing
   const handleMouseUp = () => {
     if (isDragging || isResizing) {
-      console.log('Ending drag/resize');
       setIsDragging(false);
       setIsResizing(false);
     }
@@ -126,7 +132,7 @@ const CanvasElement = ({
         document.removeEventListener('mouseup', handleMouseUp);
       };
     }
-  }, [isDragging, isResizing, dragOffset, element]);
+  }, [isDragging, isResizing, dragOffset]);
 
   // Render the appropriate element content based on type
   const renderElementContent = () => {
@@ -168,62 +174,67 @@ const CanvasElement = ({
         return null;
     }
   };
-
+  
   return (
     <div
-      className={`absolute border-2 ${isSelected ? 'border-blue-500' : 'border-gray-300'}`}
+      ref={elementRef}
+      className={`absolute transition-shadow ease-in-out duration-150 ${
+        isSelected ? 'border-2 border-blue-500 shadow-lg' : 
+        isDragOver ? 'border-2 border-green-500' : 
+        'border border-gray-200'
+      }`}
       style={{
         left: `${element.x}px`,
         top: `${element.y}px`,
         width: `${element.width}px`,
         height: `${element.height}px`,
-        zIndex: element.zIndex,
+        zIndex: isSelected ? 100 : element.zIndex,
         cursor: isDragging ? 'grabbing' : 'grab',
         backgroundColor: 'rgba(255, 255, 255, 0.8)',
-        boxShadow: isSelected ? '0 0 10px rgba(0, 0, 0, 0.2)' : 'none',
       }}
       onMouseDown={handleMouseDown}
     >
       {renderElementContent()}
       
-      {/* Resize handles - only show for selected element */}
+      {/* Element controls - only show for selected element */}
       {isSelected && (
         <>
-          <div className="absolute -top-6 left-0 bg-blue-500 text-white text-xs p-1 rounded-t">
-            <Move size={16} /> Drag
+          <div className="absolute -top-6 left-0 bg-blue-500 text-white text-xs p-1 rounded-t flex items-center no-drag">
+            <GripVertical size={14} className="mr-1" /> 
+            {element.type === 'dataField' ? element.displayName || 'Data Field' : element.type.charAt(0).toUpperCase() + element.type.slice(1)}
           </div>
           
-          {/* Corner and edge resize handles */}
+          {/* Resize handles */}
           <div
-            className="absolute top-0 left-0 w-3 h-3 bg-blue-500 rounded-full cursor-nw-resize -translate-x-1/2 -translate-y-1/2"
+            className="absolute top-0 left-0 w-3 h-3 bg-blue-500 rounded-full cursor-nw-resize -translate-x-1/2 -translate-y-1/2 resize-handle"
             onMouseDown={(e) => handleResizeStart(e, 'nw')}
           />
           <div
-            className="absolute top-0 right-0 w-3 h-3 bg-blue-500 rounded-full cursor-ne-resize translate-x-1/2 -translate-y-1/2"
+            className="absolute top-0 right-0 w-3 h-3 bg-blue-500 rounded-full cursor-ne-resize translate-x-1/2 -translate-y-1/2 resize-handle"
             onMouseDown={(e) => handleResizeStart(e, 'ne')}
           />
           <div
-            className="absolute bottom-0 left-0 w-3 h-3 bg-blue-500 rounded-full cursor-sw-resize -translate-x-1/2 translate-y-1/2"
+            className="absolute bottom-0 left-0 w-3 h-3 bg-blue-500 rounded-full cursor-sw-resize -translate-x-1/2 translate-y-1/2 resize-handle"
             onMouseDown={(e) => handleResizeStart(e, 'sw')}
           />
           <div
-            className="absolute bottom-0 right-0 w-3 h-3 bg-blue-500 rounded-full cursor-se-resize translate-x-1/2 translate-y-1/2"
+            className="absolute bottom-0 right-0 w-3 h-3 bg-blue-500 rounded-full cursor-se-resize translate-x-1/2 translate-y-1/2 resize-handle"
             onMouseDown={(e) => handleResizeStart(e, 'se')}
           />
           <div
-            className="absolute top-0 left-1/2 w-3 h-3 bg-blue-500 rounded-full cursor-n-resize -translate-x-1/2 -translate-y-1/2"
+            className="absolute top-0 left-1/2 w-3 h-3 bg-blue-500 rounded-full cursor-n-resize -translate-x-1/2 -translate-y-1/2 resize-handle"
             onMouseDown={(e) => handleResizeStart(e, 'n')}
           />
           <div
-            className="absolute bottom-0 left-1/2 w-3 h-3 bg-blue-500 rounded-full cursor-s-resize -translate-x-1/2 translate-y-1/2"
+            className="absolute bottom-0 left-1/2 w-3 h-3 bg-blue-500 rounded-full cursor-s-resize -translate-x-1/2 translate-y-1/2 resize-handle"
             onMouseDown={(e) => handleResizeStart(e, 's')}
           />
           <div
-            className="absolute left-0 top-1/2 w-3 h-3 bg-blue-500 rounded-full cursor-w-resize -translate-x-1/2 -translate-y-1/2"
+            className="absolute left-0 top-1/2 w-3 h-3 bg-blue-500 rounded-full cursor-w-resize -translate-x-1/2 -translate-y-1/2 resize-handle"
             onMouseDown={(e) => handleResizeStart(e, 'w')}
           />
           <div
-            className="absolute right-0 top-1/2 w-3 h-3 bg-blue-500 rounded-full cursor-e-resize translate-x-1/2 -translate-y-1/2"
+            className="absolute right-0 top-1/2 w-3 h-3 bg-blue-500 rounded-full cursor-e-resize translate-x-1/2 -translate-y-1/2 resize-handle"
             onMouseDown={(e) => handleResizeStart(e, 'e')}
           />
         </>

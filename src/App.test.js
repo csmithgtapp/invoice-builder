@@ -3,6 +3,6 @@ import App from './App';
 
 test('renders invoice builder component', () => {
   render(<App />);
-  const invoiceElement = screen.getByText(/Invoice Builder/i);
+  const invoiceElement = screen.getByText(/Document Builder/i);
   expect(invoiceElement).toBeInTheDocument();
 });

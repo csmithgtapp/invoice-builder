@@ -48,3 +48,17 @@
   z-index: 1000 !important;
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
 }
+.draggable-element {
+  transition: box-shadow 0.1s ease;
+  will-change: transform, left, top;
+}
+
+.draggable-element.dragging {
+  z-index: 1000 !important;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+}
+
+body.dragging {
+  cursor: grabbing !important;
+  user-select: none;
+}

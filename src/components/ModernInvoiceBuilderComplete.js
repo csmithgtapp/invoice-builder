@@ -1,17 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Save, Download, FileText, Trash2, Move, Plus, Settings, 
   EyeOff, Eye, FileDown, LayoutGrid, 
-  Square, List, Table, Image, Type, FileSpreadsheet } from 'lucide-react';
+  Square, List, Table, Image, Type } from 'lucide-react';
 import OrderService from '../services/OrderService';
 import PDFGenerator from '../services/PDFGenerator';
 import { Card, CardHeader, CardTitle, CardContent } from './ui/card';
-import { Input, Label, Textarea } from './ui/input';
 import { Button } from './ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/tabs';
+
+// Import our improved components
 import StylesPanel from './StylesPanel';
 import PreviewMode from './PreviewMode';
 import TextElement from './Canvas/elements/TextElement';
 import ImageElement from './Canvas/elements/ImageElement';
+import ListElement from './Canvas/elements/ListElement';
+import DataFieldElement from './Canvas/elements/DataFieldElement';
+import RectangleElement from './Canvas/elements/RectangleElement';
+import TableElement from './Canvas/elements/TableElement';
 
 const ModernInvoiceBuilderComplete = () => {
   const [elements, setElements] = useState([]);
@@ -19,14 +24,20 @@ const ModernInvoiceBuilderComplete = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [currentDragItem, setCurrentDragItem] = useState(null);
   const [orderData, setOrderData] = useState(null);
+  const [orderId, setOrderId] = useState('INV-12345');
   const [showPreview, setShowPreview] = useState(false);
   const [activeTab, setActiveTab] = useState("elements"); // "elements", "dataFields", "templates"
   const [showStylesPanel, setShowStylesPanel] = useState(false);
+  const [templates, setTemplates] = useState([]);
+  const [isDraggingElement, setIsDraggingElement] = useState(false);
   
   const canvasRef = useRef(null);
+  const orderService = new OrderService();
+  const pdfGenerator = new PDFGenerator();
 
-  // Sample elements for the canvas
+  // Load initial data
   useEffect(() => {
+    // Set some default elements for the canvas
     setElements([
       {
         id: '1',
@@ -63,17 +74,34 @@ const ModernInvoiceBuilderComplete = () => {
       }
     ]);
     
-    // Mock order data
-    setOrderData({
-      id: "INV-12345",
-      customerName: "Sample Customer Inc.",
-      items: [
-        { name: "Product A", quantity: 2, unitPrice: 29.99, total: 59.98 },
-        { name: "Product B", quantity: 1, unitPrice: 99.99, total: 99.99 }
-      ],
-      total: 159.97
-    });
+    // Fetch mock order data
+    const mockOrderData = orderService.getMockOrder('INV-12345');
+    setOrderData(mockOrderData);
+    
+    // Load templates
+    const loadTemplates = async () => {
+      try {
+        const templates = await orderService.getTemplates();
+        setTemplates(templates);
+      } catch (error) {
+        console.error('Error loading templates:', error);
+      }
+    };
+    
+    loadTemplates();
   }, []);
+  
+  // Fetch order data by ID
+  const handleFetchOrder = async (id) => {
+    if (!id) return;
+    
+    try {
+      const data = await orderService.getOrderById(id);
+      setOrderData(data);
+    } catch (error) {
+      console.error('Error fetching order:', error);
+    }
+  };
   
   // Handle drag start from sidebar
   const handleDragStart = (e, elementType) => {
@@ -111,6 +139,13 @@ const ModernInvoiceBuilderComplete = () => {
         zIndex: elements.length + 1
       };
       
+      // For data fields, add the data field property
+      if (elementType === 'dataField') {
+        const dataField = e.dataTransfer.getData('data-field') || 'id';
+        newElement.dataField = dataField;
+        newElement.content = `{${dataField}}`;
+      }
+      
       setElements([...elements, newElement]);
       setSelectedElement(newElement.id);
     }
@@ -133,6 +168,7 @@ const ModernInvoiceBuilderComplete = () => {
       case 'image': return 200;
       case 'rectangle': return 150;
       case 'list': return 200;
+      case 'dataField': return 200;
       default: return 150;
     }
   };
@@ -145,6 +181,7 @@ const ModernInvoiceBuilderComplete = () => {
       case 'image': return 150;
       case 'rectangle': return 100;
       case 'list': return 150;
+      case 'dataField': return 30;
       default: return 100;
     }
   };
@@ -155,6 +192,7 @@ const ModernInvoiceBuilderComplete = () => {
       case 'text': return 'Text content goes here';
       case 'table': return 'items';
       case 'list': return ['Item 1', 'Item 2', 'Item 3'];
+      case 'dataField': return '{dataField}';
       default: return '';
     }
   };
@@ -164,24 +202,39 @@ const ModernInvoiceBuilderComplete = () => {
       case 'heading': return { fontWeight: 'bold', fontSize: '18px', textAlign: 'center' };
       case 'text': return { fontSize: '14px' };
       case 'rectangle': return { backgroundColor: '#e2e8f0' };
+      case 'dataField': return { fontSize: '14px' };
       default: return {};
     }
   };
+// Improved drag handler with smoother movement
+const handleElementDrag = (e, element) => {
+  if (e.buttons !== 1) return; // Only process left mouse button
   
-  // Drag element on canvas
-  const handleElementDrag = (e, element) => {
-    if (e.buttons !== 1) return; // Only process left mouse button
-    
-    const canvasRect = canvasRef.current.getBoundingClientRect();
-    const newX = Math.max(0, Math.min(e.clientX - canvasRect.left, canvasRect.width - element.width));
-    const newY = Math.max(0, Math.min(e.clientY - canvasRect.top, canvasRect.height - element.height));
-    
-    setElements(elements.map(el => 
-      el.id === element.id 
-        ? { ...el, x: newX, y: newY }
-        : el
-    ));
-  };
+  // Store reference to prevent stale closures
+  const el = elements.find(el => el.id === element.id);
+  if (!el) return;
+  
+  // Get canvas boundaries
+  const canvasRect = canvasRef.current.getBoundingClientRect();
+  
+  // Calculate new position with boundary checking
+  const newX = Math.max(0, Math.min(e.clientX - canvasRect.left, canvasRect.width - el.width));
+  const newY = Math.max(0, Math.min(e.clientY - canvasRect.top, canvasRect.height - el.height));
+  
+  // Only update if position actually changed (reduces rerenders)
+  if (newX !== el.x || newY !== el.y) {
+    // Use requestAnimationFrame for smoother updates
+    requestAnimationFrame(() => {
+      setElements(prevElements => 
+        prevElements.map(item => 
+          item.id === element.id 
+            ? { ...item, x: newX, y: newY }
+            : item
+        )
+      );
+    });
+  }
+};
   
   // Update element properties
   const updateElement = (updatedElement) => {
@@ -203,6 +256,41 @@ const ModernInvoiceBuilderComplete = () => {
     setShowPreview(!showPreview);
   };
   
+  // Load template
+  const handleLoadTemplate = (templateId) => {
+    const template = templates.find(t => t.id === templateId);
+    if (template && template.elements) {
+      setElements(template.elements);
+    }
+  };
+  
+  // Save current as template
+  const saveAsTemplate = () => {
+    const templateName = prompt('Enter a name for this template:');
+    if (!templateName) return;
+    
+    const newTemplate = {
+      id: `template-${Date.now()}`,
+      name: templateName,
+      type: 'invoice',
+      elements: elements
+    };
+    
+    setTemplates([...templates, newTemplate]);
+    
+    // In a real app, you would save this to the backend
+    const saveTemplate = async () => {
+      try {
+        await orderService.saveTemplate(newTemplate);
+        alert('Template saved successfully!');
+      } catch (error) {
+        console.error('Error saving template:', error);
+      }
+    };
+    
+    saveTemplate();
+  };
+  
   // Render element content based on type
   const renderElementContent = (element, isSelected) => {
     switch(element.type) {
@@ -216,55 +304,42 @@ const ModernInvoiceBuilderComplete = () => {
           />
         );
       case 'table':
-        if (orderData && orderData.items) {
-          return (
-            <div className="w-full h-full overflow-auto">
-              <table className="w-full border-collapse text-xs">
-                <thead>
-                  <tr className="bg-gray-100">
-                    <th className="border p-1 text-left">Item</th>
-                    <th className="border p-1 text-center">Qty</th>
-                    <th className="border p-1 text-right">Price</th>
-                    <th className="border p-1 text-right">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {orderData.items.map((item, index) => (
-                    <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                      <td className="border p-1">{item.name}</td>
-                      <td className="border p-1 text-center">{item.quantity}</td>
-                      <td className="border p-1 text-right">${item.unitPrice.toFixed(2)}</td>
-                      <td className="border p-1 text-right">${item.total.toFixed(2)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          );
-        }
         return (
-          <div className="w-full h-full bg-gray-100 flex items-center justify-center text-gray-500 text-xs">
-            <Table size={24} className="mb-2" />
-            <span className="text-xs ml-2">Table</span>
-          </div>
+          <TableElement 
+            element={element}
+
+            data={orderData?.items || []}
+          />
         );
       case 'image':
-        return <ImageElement element={element} onChange={updateElement} />;
+        return (
+          <ImageElement 
+            element={element} 
+            onChange={updateElement}
+          />
+        );
       case 'rectangle':
-        return <div className="w-full h-full" style={{...element.style}} />;
+        return (
+          <RectangleElement 
+            style={element.style}
+          />
+        );
       case 'list':
         return (
-          <div className="w-full h-full p-2">
-            <ul className="list-disc pl-4 text-xs">
-              {Array.isArray(element.content) ? (
-                element.content.map((item, index) => (
-                  <li key={index}>{item}</li>
-                ))
-              ) : (
-                <li>Item 1</li>
-              )}
-            </ul>
-          </div>
+          <ListElement 
+            element={element}
+            onChange={updateElement}
+            isSelected={isSelected}
+          />
+        );
+      case 'dataField':
+        return (
+          <DataFieldElement 
+            element={element}
+            orderData={orderData}
+            onChange={updateElement}
+            isSelected={isSelected}
+          />
         );
       default:
         return null;
@@ -273,8 +348,6 @@ const ModernInvoiceBuilderComplete = () => {
 
   // Handle PDF Export
   const handleExportPDF = () => {
-    const pdfGenerator = new PDFGenerator();
-    
     // Helper function to get value from path
     const getValueFromPath = (path) => {
       if (!orderData || !path) return null;
@@ -285,6 +358,12 @@ const ModernInvoiceBuilderComplete = () => {
     };
     
     pdfGenerator.generatePDF(elements, orderData, orderData.id, getValueFromPath);
+  };
+  
+  // Handle save
+  const handleSave = () => {
+    // In a real app, you would save this to the backend
+    alert('Document saved successfully!');
   };
   
   // Handle tabs in sidebar
@@ -362,37 +441,60 @@ const ModernInvoiceBuilderComplete = () => {
           <>
             <div className="text-xs font-medium text-gray-500 uppercase mb-2">Data Fields</div>
             <div className="space-y-1 mb-4">
-              <div 
-                className="bg-white border border-gray-200 rounded-md p-2 flex items-center text-gray-700 hover:bg-gray-50 cursor-grab"
-                draggable
-                onDragStart={(e) => handleDragStart(e, 'dataField')}
-                onDragEnd={handleDragEnd}
-              >
-                <span className="text-xs font-medium">Customer Name</span>
-              </div>
-              <div 
-                className="bg-white border border-gray-200 rounded-md p-2 flex items-center text-gray-700 hover:bg-gray-50 cursor-grab"
-                draggable
-                onDragStart={(e) => handleDragStart(e, 'dataField')}
-                onDragEnd={handleDragEnd}
-              >
-                <span className="text-xs font-medium">Invoice Number</span>
-              </div>
-              <div 
-                className="bg-white border border-gray-200 rounded-md p-2 flex items-center text-gray-700 hover:bg-gray-50 cursor-grab"
-                draggable
-                onDragStart={(e) => handleDragStart(e, 'table')}
-                onDragEnd={handleDragEnd}
-              >
-                <span className="text-xs font-medium">Items Table</span>
-              </div>
-              <div 
-                className="bg-white border border-gray-200 rounded-md p-2 flex items-center text-gray-700 hover:bg-gray-50 cursor-grab"
-                draggable
-                onDragStart={(e) => handleDragStart(e, 'dataField')}
-                onDragEnd={handleDragEnd}
-              >
-                <span className="text-xs font-medium">Total Amount</span>
+              {orderData ? (
+                Object.entries(orderData).map(([key, value]) => {
+                  // Don't show items array as a data field
+                  if (key === 'items' || typeof value === 'object') return null;
+                  
+                  return (
+                    <div 
+                      key={key}
+                      className="bg-white border border-gray-200 rounded-md p-2 flex items-center text-gray-700 hover:bg-gray-50 cursor-grab"
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData('element-type', 'dataField');
+                        e.dataTransfer.setData('data-field', key);
+                        handleDragStart(e, 'dataField');
+                      }}
+                      onDragEnd={handleDragEnd}
+                    >
+                      <span className="text-xs font-medium">{key}: {value}</span>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="p-2 text-xs text-gray-500">No order data loaded</div>
+              )}
+              
+              {orderData && orderData.items && (
+                <div 
+                  className="bg-white border border-gray-200 rounded-md p-2 flex items-center text-gray-700 hover:bg-gray-50 cursor-grab"
+                  draggable
+                  onDragStart={(e) => {
+                    handleDragStart(e, 'table');
+                  }}
+                  onDragEnd={handleDragEnd}
+                >
+                  <span className="text-xs font-medium">Items Table</span>
+                </div>
+              )}
+            </div>
+            
+            <div className="border-t pt-3 mt-4">
+              <div className="flex mb-2">
+                <input
+                  type="text"
+                  placeholder="Enter Order ID"
+                  className="flex-1 p-2 border rounded-l text-sm"
+                  value={orderId}
+                  onChange={(e) => setOrderId(e.target.value)}
+                />
+                <button
+                  className="bg-blue-600 text-white px-3 py-2 rounded-r text-sm"
+                  onClick={() => handleFetchOrder(orderId)}
+                >
+                  Fetch
+                </button>
               </div>
             </div>
           </>
@@ -402,14 +504,22 @@ const ModernInvoiceBuilderComplete = () => {
           <>
             <div className="text-xs font-medium text-gray-500 uppercase mb-2">Templates</div>
             <div className="space-y-1 mb-4">
-              <select className="w-full border border-gray-200 rounded p-2 text-sm">
+              <select 
+                className="w-full border border-gray-200 rounded p-2 text-sm"
+                onChange={(e) => handleLoadTemplate(e.target.value)}
+                defaultValue=""
+              >
                 <option value="">Select a template</option>
-                <option value="invoice-standard">Standard Invoice</option>
-                <option value="invoice-detailed">Detailed Invoice</option>
-                <option value="invoice-minimal">Minimal Invoice</option>
+                {templates.map(template => (
+                  <option key={template.id} value={template.id}>{template.name}</option>
+                ))}
               </select>
+              
               <div className="mt-2">
-                <button className="w-full bg-blue-50 text-blue-600 rounded py-1.5 text-xs flex items-center justify-center">
+                <button 
+                  className="w-full bg-blue-50 text-blue-600 rounded py-1.5 text-xs flex items-center justify-center"
+                  onClick={saveAsTemplate}
+                >
                   <Plus size={12} className="mr-1" />
                   Save Current as Template
                 </button>
@@ -497,14 +607,44 @@ const ModernInvoiceBuilderComplete = () => {
               </div>
             </div>
             
-            <div className="mb-3">
-              <label className="block text-xs font-medium text-gray-500 mb-1">Content</label>
-              <textarea 
-                className="w-full text-xs border border-gray-200 rounded p-1 h-20"
-                value={element.content || ''}
-                onChange={handleContentChange}
-              />
-            </div>
+            {/* Only show content field for text-based elements */}
+            {(element.type === 'text' || element.type === 'heading' || element.type === 'dataField') && (
+              <div className="mb-3">
+                <label className="block text-xs font-medium text-gray-500 mb-1">Content</label>
+                <textarea 
+                  className="w-full text-xs border border-gray-200 rounded p-1 h-20"
+                  value={element.content || ''}
+                  onChange={handleContentChange}
+                />
+              </div>
+            )}
+            
+            {/* Data field specific options */}
+            {element.type === 'dataField' && (
+              <div className="mb-3">
+                <label className="block text-xs font-medium text-gray-500 mb-1">Data Field</label>
+                <select
+                  className="w-full text-xs border border-gray-200 rounded p-1"
+                  value={element.dataField || ''}
+                  onChange={(e) => {
+                    const dataField = e.target.value;
+                    updateElement({
+                      ...element,
+                      dataField,
+                      content: `{${dataField}}`
+                    });
+                  }}
+                >
+                  <option value="">Select a field</option>
+                  {orderData && Object.keys(orderData).map((key) => {
+                    if (key === 'items' || typeof orderData[key] === 'object') return null;
+                    return (
+                      <option key={key} value={key}>{key}</option>
+                    );
+                  })}
+                </select>
+              </div>
+            )}
             
             <div className="flex space-x-2 mb-3">
               <Button 
@@ -551,6 +691,7 @@ const ModernInvoiceBuilderComplete = () => {
             <Button 
               variant="success"
               className="flex items-center"
+              onClick={handleSave}
             >
               <Save size={16} className="mr-1.5" /> Save
             </Button>

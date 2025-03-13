@@ -1,6 +1,11 @@
 import React from 'react';
-import { Button } from './ui/button';
 import { EyeOff, Download } from 'lucide-react';
+import { Button } from './ui/button';
+import TextElement from './Canvas/elements/TextElement';
+import ImageElement from './Canvas/elements/ImageElement';
+import ListElement from './Canvas/elements/ListElement';
+import RectangleElement from './Canvas/elements/RectangleElement';
+import TableElement from './Canvas/elements/TableElement';
 
 const PreviewMode = ({ elements, orderData, onExitPreview, onExportPDF }) => {
   // Helper function to get value from orderData based on path
@@ -17,18 +22,13 @@ const PreviewMode = ({ elements, orderData, onExitPreview, onExportPDF }) => {
     switch(element.type) {
       case 'heading':
       case 'text':
-        let content = element.content || '';
-        // Handle multiline text
-        if (content.includes('\\n')) {
-          content = content.split('\\n').join('\n');
-        }
-        
+        // No editing in preview mode
         return (
           <div 
             className="w-full h-full p-2 overflow-hidden" 
             style={element.style}
           >
-            {content.split('\n').map((line, i) => (
+            {(element.content || '').split('\\n').map((line, i) => (
               <div key={i}>{line}</div>
             ))}
           </div>
@@ -37,54 +37,66 @@ const PreviewMode = ({ elements, orderData, onExitPreview, onExportPDF }) => {
       case 'table':
         if (orderData && orderData.items) {
           return (
-            <div className="w-full h-full overflow-auto">
-              <table className="w-full border-collapse text-xs">
-                <thead>
-                  <tr className="bg-gray-100">
-                    <th className="border p-1 text-left">Item</th>
-                    <th className="border p-1 text-center">Qty</th>
-                    <th className="border p-1 text-right">Price</th>
-                    <th className="border p-1 text-right">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {orderData.items.map((item, index) => (
-                    <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                      <td className="border p-1">{item.name}</td>
-                      <td className="border p-1 text-center">{item.quantity}</td>
-                      <td className="border p-1 text-right">${item.unitPrice.toFixed(2)}</td>
-                      <td className="border p-1 text-right">${item.total.toFixed(2)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <TableElement 
+              element={element} 
+              data={orderData.items}
+            />
           );
         }
         return <div className="w-full h-full bg-gray-100 flex items-center justify-center">Table</div>;
         
       case 'image':
-        return <div className="w-full h-full bg-gray-100 flex items-center justify-center">Image</div>;
+        return (
+          <div className="w-full h-full bg-gray-100 flex items-center justify-center">
+            <ImageElement element={element} />
+          </div>
+        );
         
       case 'rectangle':
-        return <div className="w-full h-full" style={element.style} />;
+        return <RectangleElement style={element.style} />;
         
       case 'list':
         return (
           <div className="w-full h-full p-2">
-            <ul className="list-disc pl-4">
-              {Array.isArray(element.content) ? (
-                element.content.map((item, index) => (
-                  <li key={index}>{item}</li>
-                ))
-              ) : (
-                <>
+            {Array.isArray(element.content) ? (
+              <ul className="list-disc pl-4">
+                {element.content.map((item, index) => (
+                  <li key={index} style={element.style}>{item}</li>
+                ))}
+              </ul>
+            ) : (
+              <div style={element.style}>
+                <ul className="list-disc pl-4">
                   <li>Item 1</li>
                   <li>Item 2</li>
                   <li>Item 3</li>
-                </>
-              )}
-            </ul>
+                </ul>
+              </div>
+            )}
+          </div>
+        );
+        
+      case 'dataField':
+        let content = element.content || '';
+        
+        if (element.dataField && orderData) {
+          // Replace template variables with actual data
+          const value = getValueFromPath(element.dataField);
+          if (value !== null && value !== undefined) {
+            // Replace all occurrences of {dataField} with the actual value
+            content = content.replace(
+              new RegExp(`\\{${element.dataField}\\}`, 'g'),
+              value
+            );
+          }
+        }
+        
+        return (
+          <div 
+            className="w-full h-full p-2 overflow-hidden" 
+            style={element.style}
+          >
+            {content}
           </div>
         );
         

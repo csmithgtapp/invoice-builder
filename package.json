@@ -12,6 +12,7 @@
     "@testing-library/user-event": "^13.5.0",
     "autoprefixer": "^10.4.13",
     "jspdf": "^3.0.0",
+    "jspdf-autotable": "^5.0.2",
     "lodash": "^4.17.21",
     "lucide-react": "^0.479.0",
     "postcss": "^8.4.21",

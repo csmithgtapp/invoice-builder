@@ -1,91 +1,11 @@
+import { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
 import _ from 'lodash';
 
 export default class PDFGenerator {
-  constructor() {
-    this.mockJsPDF = () => {
-      return new Promise((resolve) => {
-        resolve({
-          default: class jsPDF {
-            constructor(options) {
-              this.options = options;
-              this.content = [];
-              this.currentFontSize = 12;
-              this.currentFillColor = '#000000';
-              this.currentDrawColor = '#000000';
-              this.currentTextColor = '#000000';
-            }
-            
-            text(text, x, y, options) {
-              console.log(`Adding text: ${text} at (${x}, ${y})`);
-              this.content.push({ type: 'text', text, x, y, options });
-              return this;
-            }
-            
-            setFontSize(size) {
-              this.currentFontSize = size;
-              return this;
-            }
-            
-            setFillColor(r, g, b) {
-              this.currentFillColor = `rgb(${r}, ${g}, ${b})`;
-              return this;
-            }
-            
-            setDrawColor(r, g, b) {
-              this.currentDrawColor = `rgb(${r}, ${g}, ${b})`;
-              return this;
-            }
-            
-            setTextColor(r, g, b) {
-              this.currentTextColor = `rgb(${r}, ${g}, ${b})`;
-              return this;
-            }
-            
-            rect(x, y, w, h, style) {
-              console.log(`Adding rectangle at (${x}, ${y}) with size ${w}x${h}`);
-              this.content.push({ 
-                type: 'rect', 
-                x, y, w, h, 
-                style, 
-                fillColor: this.currentFillColor,
-                drawColor: this.currentDrawColor
-              });
-              return this;
-            }
-            
-            line(x1, y1, x2, y2) {
-              console.log(`Adding line from (${x1}, ${y1}) to (${x2}, ${y2})`);
-              this.content.push({ 
-                type: 'line', 
-                x1, y1, x2, y2,
-                drawColor: this.currentDrawColor
-              });
-              return this;
-            }
-            
-            addPage() {
-              console.log('Adding new page');
-              this.content.push({ type: 'page' });
-              return this;
-            }
-            
-            save(filename) {
-              console.log(`PDF would be saved as ${filename} with ${this.content.length} elements`);
-              alert(`PDF export successful: ${filename}\n\nElements: ${this.content.length}`);
-              return this;
-            }
-          }
-        });
-      });
-    };
-  }
-
   async generatePDF(elements, orderData, orderId, getValueFromPath) {
     try {
       console.log('Starting PDF generation...');
-      
-      // In a real implementation, this would use the actual jsPDF library
-      const { default: jsPDF } = await this.mockJsPDF();
       
       // Create new PDF document
       const pdf = new jsPDF({
@@ -122,113 +42,118 @@ export default class PDFGenerator {
         
         switch(element.type) {
           case 'heading':
-            pdf.setFontSize(18);
             if (element.style?.fontWeight === 'bold') {
-              pdf.setTextColor(0, 0, 0); // Black text for headings
+              pdf.setFont('helvetica', 'bold');
+            } else {
+              pdf.setFont('helvetica', 'normal');
             }
-            pdf.text(content, x, y + 5, { 
-              maxWidth: width,
-              align: element.style?.textAlign || 'left'
-            });
+            pdf.setFontSize(element.style?.fontSize ? parseInt(element.style.fontSize) : 18);
+            pdf.setTextColor(this.parseColor(element.style?.color || '#000000'));
+            
+            const align = element.style?.textAlign || 'left';
+            pdf.text(content, 
+              align === 'center' ? x + width/2 : 
+              align === 'right' ? x + width : x, 
+              y + 5, { 
+                align: align,
+                maxWidth: width 
+              }
+            );
             break;
           
           case 'text':
+            if (element.style?.fontWeight === 'bold') {
+              pdf.setFont('helvetica', 'bold');
+            } else {
+              pdf.setFont('helvetica', 'normal');
+            }
             pdf.setFontSize(element.style?.fontSize ? parseInt(element.style.fontSize) : 12);
-            pdf.setTextColor(0, 0, 0);
+            pdf.setTextColor(this.parseColor(element.style?.color || '#000000'));
             
             // Handle multi-line text
             if (typeof content === 'string' && content.includes('\\n')) {
               const lines = content.split('\\n');
+              const align = element.style?.textAlign || 'left';
+              
               lines.forEach((line, index) => {
-                pdf.text(line, x, y + 5 + (index * 5), { 
-                  maxWidth: width,
-                  align: element.style?.textAlign || 'left'
-                });
+                pdf.text(line, 
+                  align === 'center' ? x + width/2 : 
+                  align === 'right' ? x + width : x, 
+                  y + 5 + (index * 5), { 
+                    align: align,
+                    maxWidth: width 
+                  }
+                );
               });
             } else {
-              pdf.text(content, x, y + 5, { 
-                maxWidth: width,
-                align: element.style?.textAlign || 'left'
-              });
+              const align = element.style?.textAlign || 'left';
+              pdf.text(content, 
+                align === 'center' ? x + width/2 : 
+                align === 'right' ? x + width : x, 
+                y + 5, { 
+                  align: align,
+                  maxWidth: width 
+                }
+              );
             }
-            break;
-          
-          case 'dataField':
-            pdf.setFontSize(12);
-            pdf.text(content, x, y + 5, { 
-              maxWidth: width,
-              align: element.style?.textAlign || 'left'
-            });
             break;
           
           case 'rectangle':
-            if (element.style?.backgroundColor) {
-              const bgColor = element.style.backgroundColor;
-              // Parse hex color to rgb
-              if (bgColor.startsWith('#')) {
-                const r = parseInt(bgColor.slice(1, 3), 16);
-                const g = parseInt(bgColor.slice(3, 5), 16);
-                const b = parseInt(bgColor.slice(5, 7), 16);
-                pdf.setFillColor(r, g, b);
-              } else {
-                pdf.setFillColor(200, 200, 200); // Default gray
-              }
-            } else {
-              pdf.setFillColor(200, 200, 200); // Default gray
-            }
+            const fillColor = this.parseColor(element.style?.backgroundColor || '#e2e8f0');
+            const strokeColor = this.parseColor(element.style?.borderColor || '#000000');
             
-            pdf.setDrawColor(0, 0, 0);
-            pdf.rect(x, y, width, height, 'FD');
+            pdf.setFillColor(fillColor.r, fillColor.g, fillColor.b);
+            pdf.setDrawColor(strokeColor.r, strokeColor.g, strokeColor.b);
+            
+            // Draw rectangle with fill and/or stroke
+            if (element.style?.border) {
+              pdf.rect(x, y, width, height, 'FD'); // Fill and Draw
+            } else {
+              pdf.rect(x, y, width, height, 'F'); // Fill only
+            }
             break;
           
           case 'table':
             if (element.dataField === 'items' && orderData && orderData.items && Array.isArray(orderData.items)) {
               const tableData = orderData.items;
               
-              // Render table header
-              pdf.setFontSize(10);
-              pdf.setTextColor(0, 0, 0);
-              pdf.setFillColor(240, 240, 240);
-              pdf.rect(x, y, width, 8, 'F');
+              // Create table headers array
+              const headers = [['Item', 'Qty', 'Price', 'Total']];
               
-              pdf.text('Item', x + 2, y + 5);
-              pdf.text('Qty', x + width * 0.4, y + 5);
-              pdf.text('Price', x + width * 0.6, y + 5);
-              pdf.text('Total', x + width * 0.8, y + 5);
+              // Create table body array
+              const body = tableData.map(item => [
+                item.name,
+                item.quantity.toString(),
+                `$${item.unitPrice.toFixed(2)}`,
+                `$${item.total.toFixed(2)}`
+              ]);
               
-              // Draw header separator
-              pdf.setDrawColor(200, 200, 200);
-              pdf.line(x, y + 8, x + width, y + 8);
-              
-              // Render table rows
-              tableData.forEach((item, index) => {
-                const rowY = y + 12 + (index * 8);
-                
-                // Alternate row background
-                if (index % 2 === 0) {
-                  pdf.setFillColor(250, 250, 250);
-                  pdf.rect(x, rowY - 4, width, 8, 'F');
-                }
-                
-                pdf.setTextColor(0, 0, 0);
-                pdf.text(item.name, x + 2, rowY);
-                pdf.text(String(item.quantity), x + width * 0.4, rowY);
-                pdf.text(`$${item.unitPrice.toFixed(2)}`, x + width * 0.6, rowY);
-                pdf.text(`$${item.total.toFixed(2)}`, x + width * 0.8, rowY);
-                pdf.setDrawColor(230, 230, 230);
-                pdf.line(x, rowY + 4, x + width, rowY + 4);
+              // Use autotable plugin for clean tables
+              pdf.autoTable({
+                startY: y,
+                head: headers,
+                body: body,
+                theme: 'grid',
+                styles: {
+                  fontSize: 10,
+                  cellPadding: 2
+                },
+                columnStyles: {
+                  0: { cellWidth: width * 0.4 },
+                  1: { cellWidth: width * 0.2, halign: 'center' },
+                  2: { cellWidth: width * 0.2, halign: 'right' },
+                  3: { cellWidth: width * 0.2, halign: 'right' }
+                },
+                margin: { left: x },
+                tableWidth: width
               });
-            } else {
-              // Empty table placeholder
-              pdf.setFillColor(240, 240, 240);
-              pdf.rect(x, y, width, height, 'F');
-              pdf.setTextColor(150, 150, 150);
-              pdf.text('Table data', x + width/2 - 10, y + height/2);
             }
             break;
           
           case 'list':
-            pdf.setFontSize(12);
+            pdf.setFontSize(element.style?.fontSize ? parseInt(element.style.fontSize) : 12);
+            pdf.setTextColor(this.parseColor(element.style?.color || '#000000'));
+            
             if (Array.isArray(content)) {
               content.forEach((item, index) => {
                 pdf.text(`• ${item}`, x, y + 5 + (index * 5));
@@ -239,11 +164,31 @@ export default class PDFGenerator {
             break;
           
           case 'image':
-            // In a real implementation, you would handle images properly
+            // For now, we'll just draw a placeholder rectangle
             pdf.setFillColor(240, 240, 240);
             pdf.rect(x, y, width, height, 'F');
             pdf.setTextColor(150, 150, 150);
-            pdf.text('Image', x + width/2 - 10, y + height/2);
+            pdf.text('Image', x + width/2, y + height/2, { align: 'center' });
+            break;
+            
+          case 'dataField':
+            if (element.style?.fontWeight === 'bold') {
+              pdf.setFont('helvetica', 'bold');
+            } else {
+              pdf.setFont('helvetica', 'normal');
+            }
+            pdf.setFontSize(element.style?.fontSize ? parseInt(element.style.fontSize) : 12);
+            pdf.setTextColor(this.parseColor(element.style?.color || '#000000'));
+            
+            const dataAlign = element.style?.textAlign || 'left';
+            pdf.text(content, 
+              dataAlign === 'center' ? x + width/2 : 
+              dataAlign === 'right' ? x + width : x, 
+              y + 5, { 
+                align: dataAlign,
+                maxWidth: width 
+              }
+            );
             break;
         }
       });
@@ -257,5 +202,33 @@ export default class PDFGenerator {
       alert('Error generating PDF. Please try again.');
       return false;
     }
+  }
+  
+  // Helper function to parse color
+  parseColor(color) {
+    if (!color) return { r: 0, g: 0, b: 0 };
+    
+    // Handle hex colors
+    if (color.startsWith('#')) {
+      const r = parseInt(color.slice(1, 3), 16);
+      const g = parseInt(color.slice(3, 5), 16);
+      const b = parseInt(color.slice(5, 7), 16);
+      return { r, g, b };
+    } 
+    
+    // Handle rgb/rgba colors
+    if (color.startsWith('rgb')) {
+      const values = color.match(/\d+/g);
+      if (values && values.length >= 3) {
+        return {
+          r: parseInt(values[0]),
+          g: parseInt(values[1]),
+          b: parseInt(values[2])
+        };
+      }
+    }
+    
+    // Default to black
+    return { r: 0, g: 0, b: 0 };
   }
 }

@@ -1,11 +1,11 @@
 import React from 'react';
 import './App.css';
-import ModernInvoiceBuilderComplete from './components/ModernInvoiceBuilderComplete';
+import DocumentBuilder from './components/DocumentBuilder';
 
 function App() {
   return (
     <div className="App">
-      <ModernInvoiceBuilderComplete />
+      <DocumentBuilder />
     </div>
   );
 }

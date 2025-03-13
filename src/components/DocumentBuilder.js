@@ -18,7 +18,7 @@ import DataFieldElement from './Canvas/elements/DataFieldElement';
 import RectangleElement from './Canvas/elements/RectangleElement';
 import TableElement from './Canvas/elements/TableElement';
 
-const ModernInvoiceBuilderComplete = () => {
+const DocumentBuilder = () => {
   const [elements, setElements] = useState([]);
   const [selectedElement, setSelectedElement] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -317,7 +317,7 @@ const ModernInvoiceBuilderComplete = () => {
         y: 50,
         width: 250,
         height: 40,
-        content: 'COMMERCIAL INVOICE',
+        content: 'DOCUMENT',
         style: { fontWeight: 'bold', fontSize: '18px', textAlign: 'center' },
         zIndex: 1
       },
@@ -1294,7 +1294,7 @@ const ModernInvoiceBuilderComplete = () => {
             >
               <div 
                 ref={canvasRef}
-                id="invoice-canvas"
+                id="document-canvas"
                 className="bg-white shadow-xl w-[595px] h-[842px] relative"
                 style={{
                   transform: `scale(${zoomLevel})`,
@@ -1437,4 +1437,4 @@ const ModernInvoiceBuilderComplete = () => {
   );
 };
 
-export default ModernInvoiceBuilderComplete;
+export default DocumentBuilder;
